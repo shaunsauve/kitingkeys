@@ -112,6 +112,66 @@ div.pressedKey kbd {
     color: blue;
     cursor: pointer;
 }
+/* Browser defaults reference */
+#browserDefaultsList table {
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 16px;
+}
+#browserDefaultsList th,
+#browserDefaultsList td {
+    padding: 4px 12px;
+    border-bottom: 1px solid #eee;
+    text-align: left;
+    font-size: 13px;
+}
+#browserDefaultsList th {
+    background: #f5f5f5;
+    font-weight: 600;
+}
+#browserDefaultsList .category-header {
+    background: #e8e8e8;
+    font-weight: 600;
+    font-size: 14px;
+    padding: 8px 12px;
+}
+.badge-override {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    background: #d4edda;
+    color: #155724;
+    border: 1px solid #c3e6cb;
+}
+.badge-locked {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    background: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f5c6cb;
+}
+.badge-commands {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    background: #fff3cd;
+    color: #856404;
+    border: 1px solid #ffeeba;
+}
+#presetSection select {
+    padding: 4px 8px;
+    font-size: 14px;
+}
+#presetSection button {
+    padding: 4px 12px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
 span.highlight {
     background: -webkit-gradient(linear, left top, left bottom, color-stop(0%,#FFF785), color-stop(100%,#FFC542));
 }

@@ -1,4 +1,8 @@
 const KeyboardUtils = {
+    // WHY: When Alt is held on Mac, event.key returns composed Unicode (e.g., Alt+s → ß).
+    // We need the physical key's ASCII character, so we map event.code to [unshifted, shifted].
+    // This same map is used on Windows/Linux as a fallback for Alt combos that produce
+    // non-ASCII event.key values (rare but possible with international layouts).
     keyCodesMac: {
         Minus: ["-", "_"],
         Equal: ["=", "+"],
@@ -9,7 +13,18 @@ const KeyboardUtils = {
         Quote: ["'", "\""],
         Comma: [",", "<"],
         Period: [".", ">"],
-        Slash: ["/", "?"]
+        Slash: ["/", "?"],
+        Backquote: ["`", "~"],
+        Digit1: ["1", "!"],
+        Digit2: ["2", "@"],
+        Digit3: ["3", "#"],
+        Digit4: ["4", "$"],
+        Digit5: ["5", "%"],
+        Digit6: ["6", "^"],
+        Digit7: ["7", "&"],
+        Digit8: ["8", "*"],
+        Digit9: ["9", "("],
+        Digit0: ["0", ")"],
     },
     keyCodes: {
         ESC: 27,
@@ -107,15 +122,16 @@ KeyboardUtils.getKeyChar = function(event) {
                     }
                 }
             } else {
-                if (character.charCodeAt(0) > 127   // Alt-s is ß under Mac
+                if (character.charCodeAt(0) > 127   // Alt-s is ß under Mac, or international layouts
                     || character === "Dead"         // Alt-i is Dead under Mac
                 ) {
-                    if (event.keyCode < 127) {
+                    // WHY: Use event.code → physical key mapping first (works for symbol keys
+                    // across all platforms), fall back to keyCode for letter keys.
+                    if (this.keyCodesMac.hasOwnProperty(event.code)) {
+                        character = this.keyCodesMac[event.code][event.shiftKey ? 1 : 0];
+                    } else if (event.keyCode < 127) {
                         character = String.fromCharCode(event.keyCode);
                         character = event.shiftKey ? character : character.toLowerCase();
-                    } else if (this.keyCodesMac.hasOwnProperty(event.code)) {
-                        // Alt-/ or Alt-?
-                        character = this.keyCodesMac[event.code][event.shiftKey ? 1 : 0];
                     }
                 } else if (character === "Unidentified") {
                     // for IME on
@@ -188,7 +204,9 @@ KeyboardUtils.encodeKeystroke = function (s) {
     return ret;
 };
 
-KeyboardUtils.specialKeys = ['Esc', 'Space', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace', 'Enter', 'Tab', 'Delete', 'End', 'Home', 'Insert', 'NumLock', 'PageDown', 'PageUp', 'Pause', 'ScrollLock', 'CapsLock', 'PrintScreen', 'Escape', 'Hyper'];
+// WHY: New entries must be appended to preserve encoded values of existing bindings.
+// The index in this array is baked into stored key encodings.
+KeyboardUtils.specialKeys = ['Esc', 'Space', 'F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9', 'F10', 'F11', 'F12', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backspace', 'Enter', 'Tab', 'Delete', 'End', 'Home', 'Insert', 'NumLock', 'PageDown', 'PageUp', 'Pause', 'ScrollLock', 'CapsLock', 'PrintScreen', 'Escape', 'Hyper', 'ContextMenu'];
 
 KeyboardUtils.decodeKeystroke = function (s) {
     var ret = "";

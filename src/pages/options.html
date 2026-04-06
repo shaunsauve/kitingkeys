@@ -2,7 +2,7 @@
 <html lang="en">
     <head>
         <meta charset="UTF-8">
-        <title>Surfingkeys Settings</title>
+        <title>KitingKeys Settings</title>
         <link rel="stylesheet" href="../content.css">
         <link rel="stylesheet" href="options.css">
         <script src="ace.js" type="text/javascript" charset="utf-8"></script>
@@ -83,7 +83,7 @@ settings.theme = `
             <div class='pressedKey'><kbd id="inputKey">&nbsp;</kbd></div>
         </div>
         <div id="donationDiv" class="section">
-            <h3>Support Surfingkeys with <a href="https://www.paypal.me/brookhong">paypal</a>.</h3>
+            <h3>KitingKeys is a fork of <a href="https://github.com/brookhong/Surfingkeys" target="_blank">Surfingkeys</a> by brookhong. Support the original with <a href="https://www.paypal.me/brookhong">paypal</a>.</h3>
         </div>
         <input id="advancedToggler" type="checkbox"/> Advanced mode
         <span id="advancedTip" class="tip">If you're an advanced user, turn on it here.</span>
@@ -138,6 +138,27 @@ settings.theme = `
             </div>
             <button id="addProxyPair">Add proxy pair</button>
         </div>
+        <div id="browserDefaultsSection" class="section">
+            <h3 id="browserDefaultsToggle" style="cursor:pointer; color:blue;">Browser Default Shortcuts ▶</h3>
+            <div id="browserDefaultsContent" style="display:none;">
+                <p class="tip">These are Chrome/Brave built-in shortcuts. Keys marked <span class="badge-override">overridable</span> can be intercepted by KitingKeys. Keys marked <span class="badge-locked">locked</span> are handled by the browser and cannot be overridden by extensions.</p>
+                <div id="browserDefaultsList"></div>
+            </div>
+        </div>
+
+        <div id="presetSection" class="section">
+            <h3>Presets &amp; Reset</h3>
+            <p>Restore keybindings to a preset. This replaces your current key mappings.</p>
+            <select id="presetSelect">
+                <option value="">-- Choose a preset --</option>
+                <option value="kitingkeys">KitingKeys defaults (Surfingkeys)</option>
+                <option value="vimium">Vimium defaults</option>
+                <option value="browser">Browser defaults only (unmap all extension keys)</option>
+            </select>
+            <button id="applyPreset" style="margin-left:8px;">Apply Preset</button>
+            <span id="presetTip" class="tip"></span>
+        </div>
+
         <h3 id="resetSettings">Reset</h3>
         <script src="../content.js"></script>
     </body>

@@ -239,7 +239,7 @@ export default function(
     var sample = document.getElementById("sample").innerHTML;
     function renderSettings(rs) {
         if (rs.isMV3) {
-            document.getElementById("advancedTip").innerText = "First turn on 'Developer mode' in chrome://extensions/, then turn on 'Allow User Scripts' in Surfingkeys extension details, then toggle the 'Advanced mode' flag here.";
+            document.getElementById("advancedTip").innerText = "First turn on 'Developer mode' in chrome://extensions/, then turn on 'Allow User Scripts' in KitingKeys extension details, then toggle the 'Advanced mode' flag here.";
             advancedToggler.disabled = !rs.isUserScriptsAvailable;
             showAdvanced(rs.isUserScriptsAvailable && rs.showAdvanced);
         } else {
@@ -511,4 +511,243 @@ export default function(
 
         return self;
     })();
+
+    // --- Browser Defaults Reference ---
+    // WHY: Users need to see which browser shortcuts exist and whether KitingKeys
+    // can override them, so they can make informed keybinding decisions.
+    var browserDefaultsToggle = document.getElementById("browserDefaultsToggle");
+    var browserDefaultsContent = document.getElementById("browserDefaultsContent");
+    if (browserDefaultsToggle) {
+        browserDefaultsToggle.onclick = function() {
+            if (browserDefaultsContent.style.display === "none") {
+                browserDefaultsContent.style.display = "";
+                browserDefaultsToggle.textContent = "Browser Default Shortcuts ▼";
+                renderBrowserDefaults();
+            } else {
+                browserDefaultsContent.style.display = "none";
+                browserDefaultsToggle.textContent = "Browser Default Shortcuts ▶";
+            }
+        };
+    }
+
+    var browserDefaultsRendered = false;
+    function renderBrowserDefaults() {
+        if (browserDefaultsRendered) return;
+        browserDefaultsRendered = true;
+
+        // Inline data to avoid import issues in content script context.
+        // Mirrors src/content_scripts/common/browserDefaults.js
+        var groups = {
+            tabs: {
+                label: "Tabs & Windows",
+                shortcuts: [
+                    { keys: "Ctrl+T", description: "Open new tab", overridable: false },
+                    { keys: "Ctrl+N", description: "Open new window", overridable: false },
+                    { keys: "Ctrl+Shift+N", description: "Open incognito window", overridable: false },
+                    { keys: "Ctrl+W", description: "Close current tab", overridable: false },
+                    { keys: "Ctrl+Shift+T", description: "Reopen closed tab", overridable: false },
+                    { keys: "Ctrl+Tab", description: "Next tab", overridable: false },
+                    { keys: "Ctrl+Shift+Tab", description: "Previous tab", overridable: false },
+                    { keys: "Ctrl+1–8", description: "Go to tab 1–8", overridable: false },
+                    { keys: "Ctrl+9", description: "Go to last tab", overridable: false },
+                ],
+            },
+            navigation: {
+                label: "Navigation",
+                shortcuts: [
+                    { keys: "Alt+←", description: "Go back", overridable: true },
+                    { keys: "Alt+→", description: "Go forward", overridable: true },
+                    { keys: "Ctrl+L", description: "Focus address bar", overridable: false },
+                    { keys: "F5", description: "Reload", overridable: true },
+                    { keys: "Ctrl+R", description: "Reload", overridable: false },
+                    { keys: "Ctrl+Shift+R", description: "Hard reload", overridable: false },
+                    { keys: "Escape", description: "Stop / close dialog", overridable: true },
+                ],
+            },
+            page: {
+                label: "Page Interaction",
+                shortcuts: [
+                    { keys: "Space", description: "Scroll down", overridable: true },
+                    { keys: "Shift+Space", description: "Scroll up", overridable: true },
+                    { keys: "Home", description: "Scroll to top", overridable: true },
+                    { keys: "End", description: "Scroll to bottom", overridable: true },
+                    { keys: "Page Down", description: "Scroll page down", overridable: true },
+                    { keys: "Page Up", description: "Scroll page up", overridable: true },
+                    { keys: "Tab", description: "Focus next element", overridable: true },
+                ],
+            },
+            find: {
+                label: "Find",
+                shortcuts: [
+                    { keys: "Ctrl+F", description: "Find on page", overridable: false },
+                    { keys: "Ctrl+G", description: "Find next", overridable: false },
+                    { keys: "Ctrl+Shift+G", description: "Find previous", overridable: false },
+                    { keys: "F3", description: "Find next", overridable: true },
+                ],
+            },
+            zoom: {
+                label: "Zoom",
+                shortcuts: [
+                    { keys: "Ctrl++", description: "Zoom in", overridable: false },
+                    { keys: "Ctrl+-", description: "Zoom out", overridable: false },
+                    { keys: "Ctrl+0", description: "Reset zoom", overridable: false },
+                ],
+            },
+            bookmarks: {
+                label: "Bookmarks & History",
+                shortcuts: [
+                    { keys: "Ctrl+D", description: "Bookmark page", overridable: false },
+                    { keys: "Ctrl+Shift+B", description: "Toggle bookmarks bar", overridable: false },
+                    { keys: "Ctrl+H", description: "Open history", overridable: false },
+                    { keys: "Ctrl+J", description: "Open downloads", overridable: false },
+                ],
+            },
+            devtools: {
+                label: "Developer Tools",
+                shortcuts: [
+                    { keys: "F12", description: "Toggle DevTools", overridable: true },
+                    { keys: "Ctrl+Shift+I", description: "Toggle DevTools", overridable: false },
+                    { keys: "Ctrl+Shift+J", description: "DevTools Console", overridable: false },
+                    { keys: "Ctrl+Shift+C", description: "Inspect element", overridable: false },
+                    { keys: "Ctrl+U", description: "View source", overridable: false },
+                ],
+            },
+            misc: {
+                label: "Miscellaneous",
+                shortcuts: [
+                    { keys: "Ctrl+P", description: "Print", overridable: false },
+                    { keys: "Ctrl+S", description: "Save page", overridable: false },
+                    { keys: "F11", description: "Toggle fullscreen", overridable: true },
+                ],
+            },
+        };
+
+        var html = "<table><tr><th>Shortcut</th><th>Action</th><th>Status</th></tr>";
+        for (var cat in groups) {
+            var g = groups[cat];
+            html += "<tr><td colspan='3' class='category-header'>" + g.label + "</td></tr>";
+            for (var i = 0; i < g.shortcuts.length; i++) {
+                var s = g.shortcuts[i];
+                var badge;
+                if (s.overridable === true) {
+                    badge = "<span class='badge-override'>overridable</span>";
+                } else if (s.overridable === "commands") {
+                    badge = "<span class='badge-commands'>via chrome.commands</span>";
+                } else {
+                    badge = "<span class='badge-locked'>locked</span>";
+                }
+                html += "<tr><td><kbd>" + s.keys + "</kbd></td><td>" + s.description + "</td><td>" + badge + "</td></tr>";
+            }
+        }
+        html += "</table>";
+        setSanitizedContent(document.getElementById("browserDefaultsList"), html);
+    }
+
+    // --- Preset Selector ---
+    // WHY: Users need a quick way to switch between keybinding presets
+    // (KitingKeys defaults, Vimium-style, or no extension keys at all).
+    var applyPresetBtn = document.getElementById("applyPreset");
+    var presetSelect = document.getElementById("presetSelect");
+    var presetTip = document.getElementById("presetTip");
+    if (applyPresetBtn) {
+        applyPresetBtn.onclick = function() {
+            var preset = presetSelect.value;
+            if (!preset) {
+                presetTip.textContent = "Please select a preset first.";
+                return;
+            }
+
+            var confirmMsg;
+            var snippets;
+            switch (preset) {
+                case "kitingkeys":
+                    confirmMsg = "Restore all keybindings to KitingKeys (Surfingkeys) defaults?";
+                    snippets = ""; // empty snippets = use built-in defaults
+                    break;
+                case "vimium":
+                    confirmMsg = "Switch to Vimium-style keybindings? This will replace your current mappings.";
+                    // WHY: We generate a user script snippet that unmaps all defaults
+                    // then applies Vimium-compatible bindings.
+                    snippets = [
+                        "// Vimium-style preset - generated by KitingKeys",
+                        "// Unmaps all default bindings, then applies Vimium equivalents.",
+                        "api.unmapAllExcept([]);",
+                        "",
+                        "// --- Scrolling ---",
+                        "api.mapkey('j', 'Scroll down', function() { api.Normal.scroll('down'); });",
+                        "api.mapkey('k', 'Scroll up', function() { api.Normal.scroll('up'); });",
+                        "api.mapkey('h', 'Scroll left', function() { api.Normal.scroll('left'); });",
+                        "api.mapkey('l', 'Scroll right', function() { api.Normal.scroll('right'); });",
+                        "api.mapkey('gg', 'Scroll to top', function() { api.Normal.scroll('top'); });",
+                        "api.mapkey('G', 'Scroll to bottom', function() { api.Normal.scroll('bottom'); });",
+                        "api.mapkey('d', 'Scroll half page down', function() { api.Normal.scroll('pageDown'); });",
+                        "api.mapkey('u', 'Scroll half page up', function() { api.Normal.scroll('pageUp'); });",
+                        "",
+                        "// --- Links ---",
+                        "api.mapkey('f', 'Open link in current tab', function() { api.Hints.click('a[href]'); });",
+                        "api.mapkey('F', 'Open link in new tab', function() { api.Hints.click('a[href]', true); });",
+                        "",
+                        "// --- Navigation ---",
+                        "api.mapkey('H', 'Go back', function() { history.go(-1); });",
+                        "api.mapkey('L', 'Go forward', function() { history.go(1); });",
+                        "",
+                        "// --- Tabs ---",
+                        "api.mapkey('J', 'Go one tab left', function() { api.RUNTIME('previousTab'); });",
+                        "api.mapkey('K', 'Go one tab right', function() { api.RUNTIME('nextTab'); });",
+                        "api.mapkey('x', 'Close tab', function() { api.RUNTIME('closeTab'); });",
+                        "api.mapkey('X', 'Restore tab', function() { api.RUNTIME('openLast'); });",
+                        "api.mapkey('t', 'Open URL', function() { api.Front.openOmnibar({type: 'URLs', tabbed: true}); });",
+                        "api.mapkey('T', 'Search tabs', function() { api.Front.openOmnibar({type: 'Tabs'}); });",
+                        "",
+                        "// --- Clipboard ---",
+                        "api.mapkey('yy', 'Copy current URL', function() { api.Clipboard.write(window.location.href); });",
+                        "",
+                        "// --- Find ---",
+                        "api.mapkey('/', 'Find', function() { api.Front.openOmnibar({type: 'Find'}); });",
+                        "api.mapkey('n', 'Next match', function() { api.Visual.next(false); });",
+                        "api.mapkey('N', 'Previous match', function() { api.Visual.next(true); });",
+                        "",
+                        "// --- Visual ---",
+                        "api.mapkey('v', 'Enter visual mode', function() { api.Visual.toggle(); });",
+                        "",
+                        "// --- Misc ---",
+                        "api.mapkey('?', 'Show help', function() { api.Front.showUsage(); });",
+                        "api.mapkey('r', 'Reload', function() { api.RUNTIME('reloadTab', { nocache: false }); });",
+                        "api.mapkey('gi', 'Focus first input', function() { api.Hints.create('input,textarea,[contenteditable]'); });",
+                    ].join("\n");
+                    break;
+                case "browser":
+                    confirmMsg = "Remove ALL extension keybindings? Only browser defaults will remain.";
+                    snippets = [
+                        "// Browser defaults only - all KitingKeys mappings removed",
+                        "api.unmapAllExcept([]);",
+                    ].join("\n");
+                    break;
+            }
+
+            if (!confirm(confirmMsg)) {
+                presetTip.textContent = "Cancelled.";
+                return;
+            }
+
+            RUNTIME('updateSettings', {
+                settings: {
+                    snippets: snippets,
+                    basicMappings: {}
+                }
+            }, function() {
+                if (preset === "kitingkeys") {
+                    RUNTIME("resetSettings", null, function(response) {
+                        renderSettings(response.settings);
+                        renderKeyMappings(response.settings);
+                        presetTip.textContent = "KitingKeys defaults restored.";
+                    });
+                } else {
+                    // Reload to apply new snippets
+                    presetTip.textContent = "Preset applied. Reloading...";
+                    setTimeout(function() { location.reload(); }, 500);
+                }
+            });
+        };
+    }
 }

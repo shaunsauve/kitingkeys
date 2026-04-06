@@ -17,7 +17,7 @@ function createUiHost(browser, onload) {
     ifr.setAttribute('scrolling', "no");
     ifr.setAttribute('class', "sk_ui");
     ifr.setAttribute('src', frontEndURL);
-    ifr.setAttribute('title', "Surfingkeys");
+    ifr.setAttribute('title', "KitingKeys");
     ifr.style.position = "fixed";
     ifr.style.left = 0;
     ifr.style.bottom = 0;

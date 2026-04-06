@@ -405,7 +405,7 @@ const Front = (function() {
             const lh = Mode.specialKeys["<Alt-s>"].length;
             if (lh > 0) {
                 help_groups[0].push("<div><span class=kbd-span><kbd>{0}</kbd></span><span class=annotation>{1}</span></div>".format(
-                    htmlEncode(Mode.specialKeys["<Alt-s>"][lh - 1]), locale("Toggle SurfingKeys on current site")));
+                    htmlEncode(Mode.specialKeys["<Alt-s>"][lh - 1]), locale("Toggle KitingKeys on current site")));
             }
 
             metas = metas.concat(getAnnotations(omnibar.mappings));
@@ -423,7 +423,7 @@ const Front = (function() {
                 }
             }).join("");
 
-            help_groups += `<p style='float:right; width:100%; text-align:right'><a href='https://github.com/brookhong/surfingkeys' target='_blank' style='color:#0095dd'>${locale("More help")}</a></p>`;
+            help_groups += `<p style='float:right; width:100%; text-align:right'><a href='https://github.com/brookhong/Surfingkeys' target='_blank' style='color:#0095dd'>${locale("More help")} (Surfingkeys)</a></p>`;
             cb(help_groups);
         });
     }

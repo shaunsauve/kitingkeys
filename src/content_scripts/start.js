@@ -31,7 +31,7 @@ RUNTIME("getTopSites", null, function(response) {
         });
     };
 
-    document.querySelector('#show-full-list-of-surfingkeys>a').onclick = function() {
+    (document.querySelector('#show-full-list-of-kitingkeys>a') || document.querySelector('#show-full-list-of-surfingkeys>a')).onclick = function() {
         var cl = screen1.classList;
         cl.remove("fadeOut");
         cl.remove("fadeIn");
