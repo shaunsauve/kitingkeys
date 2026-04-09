@@ -1,0 +1,287 @@
+/* ============================================================
+   Keybindings Table — styles for the unified binding list
+   ============================================================
+   WHY separate file: keeps table styling out of the main
+   options.css so each component's CSS is independently editable.
+   ============================================================ */
+
+/* ---- Table layout ---- */
+
+#keybindings-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    font-family: var(--font-sans);
+}
+
+#keybindings-table thead {
+    /* WHY: sticky header stays visible when scrolling the long binding list */
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--header-bg);
+}
+
+#keybindings-table th {
+    text-align: left;
+    padding: 8px 12px;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--input-placeholder);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-bottom: 1px solid var(--border-color);
+    user-select: none;
+}
+
+#keybindings-table td {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--border-color);
+    vertical-align: middle;
+}
+
+/* WHY: alternating row backgrounds improve scanability in a long list */
+#keybindings-table tbody tr:nth-child(even) {
+    background: rgba(255, 255, 255, 0.02);
+}
+
+@media (prefers-color-scheme: light) {
+    #keybindings-table tbody tr:nth-child(even) {
+        background: rgba(0, 0, 0, 0.02);
+    }
+}
+
+/* Row hover */
+#keybindings-table tbody tr:hover {
+    background: var(--sidebar-hover-bg);
+}
+
+/* ---- Column widths ---- */
+
+.col-command {
+    min-width: 180px;
+}
+
+.col-key {
+    min-width: 100px;
+    font-family: var(--font-mono);
+    cursor: default;
+}
+
+/* Multi-key slot layout: each key on its own line with optional remove button */
+.key-slot {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 1px 0;
+}
+
+.key-slot + .key-slot {
+    margin-left: 4px;
+}
+
+.key-slot-remove {
+    background: none;
+    border: none;
+    color: var(--input-placeholder);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 2px;
+    line-height: 1;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+/* Show remove button on row hover */
+tr:hover .key-slot-remove {
+    opacity: 0.6;
+}
+
+.key-slot-remove:hover {
+    opacity: 1;
+    color: #f48771;
+}
+
+/* "+" add button */
+.key-slot-add {
+    background: none;
+    border: 1px dashed var(--input-border);
+    border-radius: 3px;
+    color: var(--input-placeholder);
+    cursor: pointer;
+    font-size: 12px;
+    padding: 1px 6px;
+    margin-left: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+tr:hover .key-slot-add {
+    opacity: 0.6;
+}
+
+.key-slot-add:hover {
+    opacity: 1;
+    color: var(--accent);
+    border-color: var(--accent);
+}
+
+/* WHY: non-browser key cells are clickable to start inline editing */
+.source-default .col-key,
+.source-user .col-key {
+    cursor: pointer;
+}
+
+.col-mode {
+    width: 80px;
+}
+
+.col-source {
+    width: 100px;
+    white-space: nowrap;
+}
+
+.col-conflict {
+    min-width: 140px;
+    font-size: 12px;
+    color: #e5c07b;
+}
+
+@media (prefers-color-scheme: light) {
+    .col-conflict {
+        color: #856404;
+    }
+}
+
+.col-actions {
+    width: 36px;
+    text-align: center;
+}
+
+/* ---- Browser rows: visually distinct ---- */
+
+.source-browser {
+    opacity: 0.6;
+}
+
+.source-browser .col-command {
+    font-style: italic;
+}
+
+/* ---- User-modified rows: subtle key highlight ---- */
+
+.source-user .col-key {
+    background: rgba(14, 99, 156, 0.1);
+    border-radius: 3px;
+}
+
+/* ---- Pending (unsaved) row indicator ---- */
+/* WHY: a colored left border distinguishes rows with unsaved edits from
+   rows that are saved-as-user-modified (which use the key cell highlight).
+   The 3px orange bar is visually distinct and disappears after save/revert. */
+
+#keybindings-table tbody tr.pending-change {
+    border-left: 3px solid #e5c07b;
+}
+
+@media (prefers-color-scheme: light) {
+    #keybindings-table tbody tr.pending-change {
+        border-left: 3px solid #d4a017;
+    }
+}
+
+/* ---- Inline editing: active cell accent ---- */
+
+.col-key.editing {
+    outline: 2px solid var(--accent);
+    outline-offset: -2px;
+    border-radius: 3px;
+    background: var(--input-bg);
+}
+
+/* ---- Source badges ---- */
+
+.badge-source-default {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    background: var(--sidebar-active-bg);
+    color: var(--main-text);
+    border: 1px solid var(--border-color);
+}
+
+.badge-source-user {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    background: #2d4f2d;
+    color: #4ec9b0;
+    border: 1px solid #3a6b3a;
+}
+
+@media (prefers-color-scheme: light) {
+    .badge-source-user {
+        background: #d4edda;
+        color: #155724;
+        border-color: #c3e6cb;
+    }
+}
+
+/* ---- Action button ---- */
+
+.action-btn {
+    background: none;
+    border: none;
+    color: var(--input-placeholder);
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    padding: 2px 6px;
+    border-radius: 3px;
+    transition: color 0.15s, background 0.15s;
+}
+
+/* WHY: action button is subtle by default, brighter on row hover */
+#keybindings-table tbody tr:hover .action-btn {
+    color: var(--main-text);
+}
+
+.action-btn:hover {
+    background: var(--sidebar-active-bg);
+    color: var(--main-text);
+}
+
+/* ---- Context dropdown menu ---- */
+
+.kb-context-menu {
+    z-index: 100;
+    min-width: 160px;
+    background: var(--sidebar-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    padding: 4px 0;
+    font-size: 13px;
+    font-family: var(--font-sans);
+}
+
+.kb-context-menu-item {
+    padding: 6px 14px;
+    cursor: pointer;
+    color: var(--main-text);
+    white-space: nowrap;
+    transition: background 0.1s;
+}
+
+.kb-context-menu-item:hover {
+    background: var(--accent);
+    color: #fff;
+}
+
+@media (prefers-color-scheme: light) {
+    .kb-context-menu {
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    }
+}

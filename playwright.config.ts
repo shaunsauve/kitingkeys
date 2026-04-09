@@ -13,12 +13,11 @@ import { browserProjects } from './tests/e2e/playwright.browsers';
 //   tests/e2e/fixtures.ts - shared extension launch helper
 //   tests/e2e/*.spec.ts - extension integration tests
 
+// WHY: headless mode is controlled in fixtures.ts via PW_HEADED env var.
+// Do NOT set headless here — it conflicts with the fixture's launchPersistentContext.
 export default defineConfig({
   testDir: './tests/e2e',
   timeout: 30_000,
   retries: 0,
-  use: {
-    headless: false, // extensions require headed mode
-  },
   projects: browserProjects,
 });

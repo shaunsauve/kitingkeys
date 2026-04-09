@@ -8,10 +8,18 @@ import path from 'path';
 // Firefox uses a completely different extension loading mechanism (web-ext),
 // so Firefox tests get a plain context without extension loading.
 //
+// Headless vs headed:
+//   Default: headless (no visible window) — requires Playwright 1.40+ / Chrome 128+
+//   PW_HEADED=1: shows the browser window for visual debugging
+//
 // See also:
 //   playwright.config.ts - project definitions for chrome/brave/chromium/firefox
 
 const EXTENSION_PATH = path.resolve(__dirname, '..', '..', 'dist', 'development', 'chrome');
+
+// WHY: Single source of truth for headed/headless across all browsers.
+// Playwright 1.40+ defaults to Chrome's "new headless" which supports extensions.
+const HEADED = process.env.PW_HEADED === '1';
 
 export type ExtensionFixtures = {
   context: BrowserContext;
@@ -25,7 +33,7 @@ export const test = base.extend<ExtensionFixtures>({
       // Firefox: plain context, no extension loading
       const browser = await base.step('Launch Firefox', async () => {
         const { firefox } = await import('@playwright/test');
-        return firefox.launch({ headless: false });
+        return firefox.launch({ headless: !HEADED });
       });
       const context = await browser.newContext();
       await use(context);
@@ -35,18 +43,23 @@ export const test = base.extend<ExtensionFixtures>({
 
     // Chromium-based browsers (Chrome, Brave, Chromium)
     const projectName = testInfo.project.name;
+
+    const args = [
+      `--disable-extensions-except=${EXTENSION_PATH}`,
+      `--load-extension=${EXTENSION_PATH}`,
+      // Suppress first-run dialogs
+      '--no-first-run',
+      '--disable-default-apps',
+      // WHY: Chrome 127+ started deprecating MV2; this flag ensures
+      // MV2 extensions can still be loaded for testing.
+      '--enable-features=ExtensionsManifestV2',
+    ];
+
     const launchOptions: Record<string, unknown> = {
-      headless: false,
-      args: [
-        `--disable-extensions-except=${EXTENSION_PATH}`,
-        `--load-extension=${EXTENSION_PATH}`,
-        // Suppress first-run dialogs
-        '--no-first-run',
-        '--disable-default-apps',
-        // WHY: Chrome 127+ started deprecating MV2; this flag ensures
-        // MV2 extensions can still be loaded for testing.
-        '--enable-features=ExtensionsManifestV2',
-      ],
+      // WHY: Playwright 1.40+ uses Chrome's "new headless" for headless: true,
+      // which supports extensions. Set PW_HEADED=1 for visible debugging.
+      headless: !HEADED,
+      args,
     };
 
     // Brave or Chrome: use executablePath or channel

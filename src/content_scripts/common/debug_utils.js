@@ -7,7 +7,8 @@
 */
 function breakOn(property, flag, expected) {
     var target = property.match(/(\S*)\.(.*)/);
-    var object = eval(target[1]), property = target[2];
+    // WHY: eval() violates MV3 CSP. Walk the property path instead.
+    var object = target[1].split('.').reduce((o, k) => o[k], window), property = target[2];
     var hash_magic = "_$_$" + property;
     if (!object.hasOwnProperty(hash_magic)) {
         object[hash_magic] = object[property];

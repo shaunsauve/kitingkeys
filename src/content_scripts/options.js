@@ -1,3 +1,10 @@
+// WHY: options.js is bundled by webpack (moduleEntries in webpack.config.js) and loaded
+// via dynamic import() in content.js. Because webpack processes this file, we can directly
+// import the new component classes — webpack follows the import chain and bundles them in.
+// This avoids the complexity of a window-global bridge between ES modules and webpack bundles.
+import { BindingRegistry } from '../pages/bindingRegistry.js';
+import { KeybindingsTable } from '../pages/keybindingsTable.js';
+
 export default function(
     RUNTIME,
     KeyboardUtils,
@@ -10,6 +17,10 @@ export default function(
     setSanitizedContent,
     showBanner,
 ) {
+    // --- Registry and table instances (F009: registry as sole source of truth) ---
+    var registry = null;
+    var table = null;
+
     var mappingsEditor = null;
     function createMappingEditor(elmId) {
         var _ace = ace.edit(elmId);
@@ -218,33 +229,10 @@ export default function(
         });
     }
 
-    const basicSettingsDiv = document.getElementById("basicSettings");
-    const basicMappingsDiv = document.getElementById("basicMappings");
-    const advancedSettingDiv = document.getElementById("advancedSetting");
-    const advancedToggler = document.getElementById("advancedToggler");
-    function showAdvanced(flag) {
-        if (flag) {
-            basicSettingsDiv.hide();
-            advancedSettingDiv.show();
-            advancedToggler.setAttribute('checked', 'checked');
-        } else {
-            basicSettingsDiv.show();
-            advancedSettingDiv.hide();
-            advancedToggler.removeAttribute('checked');
-        }
-    }
-
     var localPathSaved = "";
     var localPathInput = document.getElementById("localPath");
     var sample = document.getElementById("sample").innerHTML;
     function renderSettings(rs) {
-        if (rs.isMV3) {
-            document.getElementById("advancedTip").innerText = "First turn on 'Developer mode' in chrome://extensions/, then turn on 'Allow User Scripts' in KitingKeys extension details, then toggle the 'Advanced mode' flag here.";
-            advancedToggler.disabled = !rs.isUserScriptsAvailable;
-            showAdvanced(rs.isUserScriptsAvailable && rs.showAdvanced);
-        } else {
-            showAdvanced(rs.showAdvanced);
-        }
         if (rs.localPath) {
             localPathInput.value = rs.localPath;
             localPathSaved = rs.localPath;
@@ -260,41 +248,18 @@ export default function(
         renderProxySettings(rs);
     }
 
-
-    advancedToggler.onclick = function() {
-        var newFlag = this.checked;
-        RUNTIME('updateSettings', {
-            settings: {
-                showAdvanced: newFlag
-            }
-        }, (resp) => {
-            if (resp.error) {
-                showBanner(resp.error, 3000);
+    // WHY: .infoPointer may not exist in the new VSCode-style settings layout.
+    var infoPointer = document.querySelector('.infoPointer');
+    if (infoPointer) {
+        infoPointer.onclick = function() {
+            var f = document.getElementById(this.getAttribute("for"));
+            if (f.style.display === "none") {
+                f.style.display = "";
             } else {
-                showAdvanced(newFlag);
+                f.style.display = "none";
             }
-        });
-    };
-    document.getElementById('resetSettings').onclick = function() {
-        if (this.innerText === "Reset") {
-            this.innerText = "WARNING! This will clear all your settings. Click this again to continue.";
-        } else {
-            RUNTIME("resetSettings", null, function(response) {
-                renderSettings(response.settings);
-                renderKeyMappings(response.settings);
-                showBanner('Settings reset', 1000);
-            });
-        }
-    };
-
-    document.querySelector('.infoPointer').onclick = function() {
-        var f = document.getElementById(this.getAttribute("for"));
-        if (f.style.display === "none") {
-            f.style.display = "";
-        } else {
-            f.style.display = "none";
-        }
-    };
+        };
+    }
 
     function getURIPath(fn) {
         if (fn.length && !/^\w+:\/\/\w+/i.test(fn) && fn.indexOf('file:///') === -1) {
@@ -314,7 +279,6 @@ export default function(
                 url: localPath
             }, function(res) {
                 showBanner(res.status + ' to load settings from ' + localPath, 5000);
-                renderKeyMappings(res);
                 if (res.snippets && res.snippets.length) {
                     localPathSaved = localPath;
                     mappingsEditor.setValue(res.snippets, -1);
@@ -334,24 +298,6 @@ export default function(
         }
     }
     document.getElementById('save_button').onclick = saveSettings;
-
-    var basicMappings = ['d', 'R', 'f', 'E', 'e', 'x', 'gg', 'j', '/', 'n', 'r', 'k', 'S', 'C', 'on', 'G', 'v', 'i', ';e', 'og', 'g0', 't', '<Ctrl-6>', 'yy', 'g$', 'D', 'ob', 'X', 'sg', 'cf', 'yv', 'yt', 'N', 'l', 'cc', '$', 'yf', 'w', '0', 'yg', 'ow', 'cs', 'b', 'om', 'ya', 'h', 'gU', 'W', 'B', 'F', ';j'];
-
-
-    document.addEventListener("surfingkeys:defaultSettingsLoaded", function(evt) {
-        const { normal } = evt.detail;
-        basicMappings = basicMappings.map(function(w, i) {
-            const binding = normal.mappings.find(KeyboardUtils.encodeKeystroke(w));
-            if (binding) {
-                return {
-                    origin: w,
-                    annotation: binding.meta.annotation
-                };
-            } else {
-                return null;
-            }
-        }).filter((m) => m !== null);;
-    });
 
     function renderSearchAlias(frontCommand, disabledSearchAliases) {
         new Promise((r, j) => {
@@ -401,353 +347,250 @@ export default function(
         });
     }
 
-    function renderKeyMappings(rs) {
-        initL10n(function (locale) {
-            var customization = basicMappings.map(function (w, i) {
-                var newKey = w.origin;
-                if (rs.basicMappings && rs.basicMappings.hasOwnProperty(w.origin)) {
-                    newKey = rs.basicMappings[w.origin];
-                }
-                return `<div>
-                    <span class=annotation>${locale(w.annotation)}</span>
-                    <span class=kbd-span><kbd data-origin="${w.origin}" data-custom="${newKey}">${newKey ? htmlEncode(newKey) : "🚫"}</kbd></span>
-                </div>`;
-            });
+    // --- F009: Registry as sole source of truth ---
+    // WHY: surfingkeys:defaultSettingsLoaded fires once with the built-in trie mappings
+    // for all modes. We create the BindingRegistry here and populate it from the tries.
+    // The registry merges extension defaults + browser defaults into one flat list.
+    document.addEventListener("surfingkeys:defaultSettingsLoaded", function(evt) {
+        const { normal, insert, visual } = evt.detail;
 
-            setSanitizedContent(basicMappingsDiv, customization.join(""));
-            basicMappingsDiv.querySelectorAll("kbd").forEach(function(d) {
-                d.onclick = function () {
-                    KeyPicker.enter(this);
-                };
-            });
-        });
-    }
+        registry = new BindingRegistry();
+        registry.initFromTrie(
+            normal ? normal.mappings : null,
+            insert ? insert.mappings : null,
+            visual ? visual.mappings : null
+        );
 
+        // WHY: Expose registry on window so settingsShell.js (loaded as a separate
+        // ES module in options.html) can access it if needed for future coordination.
+        window.__kitingkeys_registry = registry;
+    });
+
+    // --- F001: Unified keybinding table populated from registry ---
+    // WHY: surfingkeys:userSettingsLoaded fires after user settings are read from
+    // chrome.storage. We apply user overrides to the registry, then render the table.
     document.addEventListener("surfingkeys:userSettingsLoaded", function(evt) {
         const { settings, disabledSearchAliases, frontCommand } = evt.detail;
+
+        // Apply user overrides to the registry (F009)
+        if (registry) {
+            registry.initFromStorage(settings.basicMappings || {});
+        }
+
+        // F001: Create and render the unified keybindings table
+        var container = document.getElementById('bindings-table-container');
+        if (registry && container) {
+            table = new KeybindingsTable(container, registry);
+            table.render();
+        }
+
+        // WHY: snapshot the saved state so the draft model can detect real changes
+        _snapshotSavedKeys();
+
+        // Ace editor for Advanced JS tab (preserved)
         mappingsEditor = createMappingEditor('mappings');
         renderSettings(settings);
         if ('error' in settings) {
             showBanner(settings.error, 5000);
         }
+
+        // Search aliases (preserved)
         renderSearchAlias(frontCommand, disabledSearchAliases || {});
-        renderKeyMappings(settings);
     });
 
-    var KeyPicker = (function() {
-        var self = new Mode("KeyPicker");
+    // --- F007: Preset system dispatching through registry ---
+    // WHY: settingsShell.js dispatches kitingkeys:applyPreset events when the user
+    // selects a preset from the dropdown. We handle them here because options.js
+    // owns RUNTIME (for persistence) and the registry instance.
+    document.addEventListener("kitingkeys:applyPreset", function(evt) {
+        var detail = evt.detail || {};
+        var preset = detail.preset;
+        if (!registry) return;
 
-        function showKey() {
-            var s = htmlEncode(_key);
-            if (!s) {
-                s = "&nbsp;";
+        if (preset === 'export') {
+            // WHY: Export dispatches a response event that settingsShell.js listens for
+            // to trigger the file download. The registry owns the data.
+            var exportJson = registry.exportBindings();
+            var exportData;
+            try {
+                exportData = JSON.parse(exportJson);
+            } catch (e) {
+                exportData = {};
             }
-            setSanitizedContent(document.getElementById("inputKey"), s);
+            document.dispatchEvent(new CustomEvent('kitingkeys:exportReady', {
+                detail: { data: exportData }
+            }));
+            return;
         }
 
-        var _key = "";
-        var keyPickerDiv = document.getElementById("keyPicker");
-        self.addEventListener('keydown', function(event) {
-            if (event.keyCode === 27) {
-                keyPickerDiv.hide();
-                self.exit();
-            } else if (event.keyCode === 8) {
-                var ek = KeyboardUtils.encodeKeystroke(_key);
-                ek = ek.substr(0, ek.length - 1);
-                _key = KeyboardUtils.decodeKeystroke(ek);
-                showKey();
-            } else if (event.keyCode === 13) {
-                keyPickerDiv.hide();
-                self.exit();
-                setSanitizedContent(_elm, (_key !== "") ? htmlEncode(_key) : "🚫");
-                _elm.dataset.custom = _key;
-                const realDefMap = {};
-                Array.from(basicMappingsDiv.querySelectorAll("kbd")).forEach((m) => {
-                    var n = m.dataset.custom;
-                    if (m.dataset.origin !== n) {
-                        realDefMap[m.dataset.origin] = n;
-                    }
-                });
-                RUNTIME('updateSettings', {
-                    settings: {
-                        basicMappings: realDefMap
-                    }
-                });
-            } else {
-                if (event.sk_keyName.length > 1) {
-                    var keyStr = JSON.stringify({
-                        metaKey: event.metaKey,
-                        altKey: event.altKey,
-                        ctrlKey: event.ctrlKey,
-                        shiftKey: event.shiftKey,
-                        keyCode: event.keyCode,
-                        code: event.code,
-                        composed: event.composed,
-                        key: event.key
-                    }, null, 4);
-                    reportIssue(`Unrecognized key event: ${event.sk_keyName}`, keyStr);
-                } else {
-                    _key += KeyboardUtils.decodeKeystroke(event.sk_keyName);
-                    showKey();
-                }
+        if (preset === 'import') {
+            // WHY: Import data comes from the file reader in settingsShell.js,
+            // passed via the event detail.
+            var importData = detail.data;
+            if (!importData) return;
+            try {
+                registry.importBindings(JSON.stringify(importData));
+            } catch (e) {
+                showBanner('Import failed: ' + e.message, 3000);
+                return;
             }
-            event.sk_stopPropagation = true;
+            // WHY: Presets are intentional bulk changes — persist immediately
+            _persistBindings();
+            _snapshotSavedKeys();
+            pendingChanges = {};
+            _dispatchPendingUpdate();
+            if (table) table.refresh();
+            showBanner('Bindings imported', 1000);
+            return;
+        }
+
+        // Named presets: kitingkeys, vimium, minimal
+        if (preset === 'kitingkeys' || preset === 'vimium' || preset === 'minimal') {
+            registry.applyPreset(preset);
+            // WHY: Presets are intentional bulk changes — persist immediately
+            _persistBindings();
+            _snapshotSavedKeys();
+            pendingChanges = {};
+            _dispatchPendingUpdate();
+            if (table) table.refresh();
+            showBanner('Preset "' + preset + '" applied', 1000);
+        }
+    });
+
+    // --- Draft model: pending changes tracker (T017) ---
+    // WHY: Instead of persisting every inline edit immediately, we buffer changes
+    // until the user explicitly clicks Save. This prevents accidental partial
+    // saves and lets the user experiment freely before committing.
+    var pendingChanges = {};  // { bindingId: { oldKeys, newKeys } }
+
+    /**
+     * Record a change as pending (unsaved).
+     * If the new value matches the previously-saved value, remove it from pending
+     * (the user reverted that particular edit manually).
+     */
+    function _trackPendingChange(id, newKeys) {
+        if (!registry) return;
+
+        // WHY: We need the keys as they were at last save (not current in-memory,
+        // which already reflects the edit). Use savedKeys snapshot if available,
+        // otherwise fall back to what was stored before any edits in this session.
+        var savedKeys;
+        if (pendingChanges[id]) {
+            // Already tracking — keep the original oldKeys
+            savedKeys = pendingChanges[id].oldKeys;
+        } else {
+            // First edit to this binding in this session — snapshot current saved state.
+            // The registry already updated in-memory, so we need the value from _defaults
+            // for default entries, or reconstruct from the last-persisted state.
+            // WHY: _lastSavedKeys stores a snapshot of all keys at last save/load.
+            savedKeys = _lastSavedKeys[id];
+            if (savedKeys === undefined) {
+                // Fallback: use the registry default
+                savedKeys = registry._defaults.get(id) || '';
+            }
+        }
+
+        if (newKeys === savedKeys) {
+            // WHY: user manually reverted this binding to its saved state — no longer pending
+            delete pendingChanges[id];
+        } else {
+            pendingChanges[id] = { oldKeys: savedKeys, newKeys: newKeys };
+        }
+
+        _dispatchPendingUpdate();
+    }
+
+    function _dispatchPendingUpdate() {
+        var count = Object.keys(pendingChanges).length;
+        document.dispatchEvent(new CustomEvent('kitingkeys:pendingChangesUpdated', {
+            detail: { count: count, ids: Object.keys(pendingChanges) }
+        }));
+        // WHY: Also update the visual pending indicators on table rows
+        if (table) {
+            table.markPending(new Set(Object.keys(pendingChanges)));
+        }
+    }
+
+    /**
+     * Snapshot of each binding's keys as of the last save/load.
+     * Used to detect whether an edit is truly a change or a revert-to-saved.
+     */
+    var _lastSavedKeys = {};
+
+    function _snapshotSavedKeys() {
+        _lastSavedKeys = {};
+        if (!registry) return;
+        var all = registry.getAllBindings();
+        for (var i = 0; i < all.length; i++) {
+            if (all[i].source === 'browser') continue;
+            _lastSavedKeys[all[i].id] = all[i].keys;
+        }
+    }
+
+    // WHY: Listen for binding changes from the table's inline editor (F005).
+    // Under the draft model, we track the change as pending instead of persisting.
+    document.addEventListener("kitingkeys:bindingChanged", function(evt) {
+        var detail = evt.detail || {};
+        _trackPendingChange(detail.id, detail.newKeys);
+    });
+
+    // WHY: Save button persists ALL pending changes to chrome.storage at once.
+    document.addEventListener("kitingkeys:saveChanges", function() {
+        if (Object.keys(pendingChanges).length === 0) return;
+        _persistBindings();
+        _snapshotSavedKeys();
+        pendingChanges = {};
+        _dispatchPendingUpdate();
+    });
+
+    // WHY: Revert button discards ALL pending changes and restores the registry
+    // to the last-saved state.
+    document.addEventListener("kitingkeys:revertChanges", function() {
+        if (Object.keys(pendingChanges).length === 0) return;
+        // Restore each pending binding to its saved keys
+        for (var id in pendingChanges) {
+            if (!pendingChanges.hasOwnProperty(id)) continue;
+            var oldKeys = pendingChanges[id].oldKeys;
+            var entry = registry._entries.get(id);
+            if (!entry) continue;
+            entry.keys = oldKeys;
+            entry.keysEncoded = oldKeys ? KeyboardUtils.encodeKeystroke(oldKeys) : '';
+            // WHY: restore the source based on whether oldKeys matches the default
+            var defaultKeys = registry._defaults.get(id);
+            entry.source = (oldKeys === defaultKeys) ? 'default' : 'user';
+        }
+        registry._detectConflicts();
+        pendingChanges = {};
+        _dispatchPendingUpdate();
+        if (table) table.refresh();
+    });
+
+    /**
+     * Persist current registry overrides to chrome.storage via RUNTIME.
+     * WHY: The registry tracks all changes in memory. We extract the diff
+     * (user-modified bindings vs defaults) and save it as basicMappings,
+     * which is the format the extension already understands.
+     */
+    function _persistBindings() {
+        if (!registry) return;
+
+        // Build basicMappings object: { originalKeys: newKeys } for user-modified entries
+        var allBindings = registry.getAllBindings();
+        var basicMappings = {};
+        for (var i = 0; i < allBindings.length; i++) {
+            var entry = allBindings[i];
+            if (entry.source === 'browser') continue;
+            if (entry.source !== 'user') continue;
+            // Find the default keys for this entry
+            var defaultKeys = registry._defaults.get(entry.id);
+            if (defaultKeys !== undefined && entry.keys !== defaultKeys) {
+                basicMappings[defaultKeys] = entry.keys;
+            }
+        }
+        RUNTIME('updateSettings', {
+            settings: {
+                basicMappings: basicMappings
+            }
         });
-
-        var _elm;
-        var _enter = self.enter;
-        self.enter = function(elm) {
-            _enter.call(self);
-
-            _key = elm.innerText;
-            if (_key === "🚫") {
-                _key = "";
-            }
-
-            showKey();
-            keyPickerDiv.show();
-            _elm = elm;
-        };
-
-        return self;
-    })();
-
-    // --- Browser Defaults Reference ---
-    // WHY: Users need to see which browser shortcuts exist and whether KitingKeys
-    // can override them, so they can make informed keybinding decisions.
-    var browserDefaultsToggle = document.getElementById("browserDefaultsToggle");
-    var browserDefaultsContent = document.getElementById("browserDefaultsContent");
-    if (browserDefaultsToggle) {
-        browserDefaultsToggle.onclick = function() {
-            if (browserDefaultsContent.style.display === "none") {
-                browserDefaultsContent.style.display = "";
-                browserDefaultsToggle.textContent = "Browser Default Shortcuts ▼";
-                renderBrowserDefaults();
-            } else {
-                browserDefaultsContent.style.display = "none";
-                browserDefaultsToggle.textContent = "Browser Default Shortcuts ▶";
-            }
-        };
-    }
-
-    var browserDefaultsRendered = false;
-    function renderBrowserDefaults() {
-        if (browserDefaultsRendered) return;
-        browserDefaultsRendered = true;
-
-        // Inline data to avoid import issues in content script context.
-        // Mirrors src/content_scripts/common/browserDefaults.js
-        var groups = {
-            tabs: {
-                label: "Tabs & Windows",
-                shortcuts: [
-                    { keys: "Ctrl+T", description: "Open new tab", overridable: false },
-                    { keys: "Ctrl+N", description: "Open new window", overridable: false },
-                    { keys: "Ctrl+Shift+N", description: "Open incognito window", overridable: false },
-                    { keys: "Ctrl+W", description: "Close current tab", overridable: false },
-                    { keys: "Ctrl+Shift+T", description: "Reopen closed tab", overridable: false },
-                    { keys: "Ctrl+Tab", description: "Next tab", overridable: false },
-                    { keys: "Ctrl+Shift+Tab", description: "Previous tab", overridable: false },
-                    { keys: "Ctrl+1–8", description: "Go to tab 1–8", overridable: false },
-                    { keys: "Ctrl+9", description: "Go to last tab", overridable: false },
-                ],
-            },
-            navigation: {
-                label: "Navigation",
-                shortcuts: [
-                    { keys: "Alt+←", description: "Go back", overridable: true },
-                    { keys: "Alt+→", description: "Go forward", overridable: true },
-                    { keys: "Ctrl+L", description: "Focus address bar", overridable: false },
-                    { keys: "F5", description: "Reload", overridable: true },
-                    { keys: "Ctrl+R", description: "Reload", overridable: false },
-                    { keys: "Ctrl+Shift+R", description: "Hard reload", overridable: false },
-                    { keys: "Escape", description: "Stop / close dialog", overridable: true },
-                ],
-            },
-            page: {
-                label: "Page Interaction",
-                shortcuts: [
-                    { keys: "Space", description: "Scroll down", overridable: true },
-                    { keys: "Shift+Space", description: "Scroll up", overridable: true },
-                    { keys: "Home", description: "Scroll to top", overridable: true },
-                    { keys: "End", description: "Scroll to bottom", overridable: true },
-                    { keys: "Page Down", description: "Scroll page down", overridable: true },
-                    { keys: "Page Up", description: "Scroll page up", overridable: true },
-                    { keys: "Tab", description: "Focus next element", overridable: true },
-                ],
-            },
-            find: {
-                label: "Find",
-                shortcuts: [
-                    { keys: "Ctrl+F", description: "Find on page", overridable: false },
-                    { keys: "Ctrl+G", description: "Find next", overridable: false },
-                    { keys: "Ctrl+Shift+G", description: "Find previous", overridable: false },
-                    { keys: "F3", description: "Find next", overridable: true },
-                ],
-            },
-            zoom: {
-                label: "Zoom",
-                shortcuts: [
-                    { keys: "Ctrl++", description: "Zoom in", overridable: false },
-                    { keys: "Ctrl+-", description: "Zoom out", overridable: false },
-                    { keys: "Ctrl+0", description: "Reset zoom", overridable: false },
-                ],
-            },
-            bookmarks: {
-                label: "Bookmarks & History",
-                shortcuts: [
-                    { keys: "Ctrl+D", description: "Bookmark page", overridable: false },
-                    { keys: "Ctrl+Shift+B", description: "Toggle bookmarks bar", overridable: false },
-                    { keys: "Ctrl+H", description: "Open history", overridable: false },
-                    { keys: "Ctrl+J", description: "Open downloads", overridable: false },
-                ],
-            },
-            devtools: {
-                label: "Developer Tools",
-                shortcuts: [
-                    { keys: "F12", description: "Toggle DevTools", overridable: true },
-                    { keys: "Ctrl+Shift+I", description: "Toggle DevTools", overridable: false },
-                    { keys: "Ctrl+Shift+J", description: "DevTools Console", overridable: false },
-                    { keys: "Ctrl+Shift+C", description: "Inspect element", overridable: false },
-                    { keys: "Ctrl+U", description: "View source", overridable: false },
-                ],
-            },
-            misc: {
-                label: "Miscellaneous",
-                shortcuts: [
-                    { keys: "Ctrl+P", description: "Print", overridable: false },
-                    { keys: "Ctrl+S", description: "Save page", overridable: false },
-                    { keys: "F11", description: "Toggle fullscreen", overridable: true },
-                ],
-            },
-        };
-
-        var html = "<table><tr><th>Shortcut</th><th>Action</th><th>Status</th></tr>";
-        for (var cat in groups) {
-            var g = groups[cat];
-            html += "<tr><td colspan='3' class='category-header'>" + g.label + "</td></tr>";
-            for (var i = 0; i < g.shortcuts.length; i++) {
-                var s = g.shortcuts[i];
-                var badge;
-                if (s.overridable === true) {
-                    badge = "<span class='badge-override'>overridable</span>";
-                } else if (s.overridable === "commands") {
-                    badge = "<span class='badge-commands'>via chrome.commands</span>";
-                } else {
-                    badge = "<span class='badge-locked'>locked</span>";
-                }
-                html += "<tr><td><kbd>" + s.keys + "</kbd></td><td>" + s.description + "</td><td>" + badge + "</td></tr>";
-            }
-        }
-        html += "</table>";
-        setSanitizedContent(document.getElementById("browserDefaultsList"), html);
-    }
-
-    // --- Preset Selector ---
-    // WHY: Users need a quick way to switch between keybinding presets
-    // (KitingKeys defaults, Vimium-style, or no extension keys at all).
-    var applyPresetBtn = document.getElementById("applyPreset");
-    var presetSelect = document.getElementById("presetSelect");
-    var presetTip = document.getElementById("presetTip");
-    if (applyPresetBtn) {
-        applyPresetBtn.onclick = function() {
-            var preset = presetSelect.value;
-            if (!preset) {
-                presetTip.textContent = "Please select a preset first.";
-                return;
-            }
-
-            var confirmMsg;
-            var snippets;
-            switch (preset) {
-                case "kitingkeys":
-                    confirmMsg = "Restore all keybindings to KitingKeys (Surfingkeys) defaults?";
-                    snippets = ""; // empty snippets = use built-in defaults
-                    break;
-                case "vimium":
-                    confirmMsg = "Switch to Vimium-style keybindings? This will replace your current mappings.";
-                    // WHY: We generate a user script snippet that unmaps all defaults
-                    // then applies Vimium-compatible bindings.
-                    snippets = [
-                        "// Vimium-style preset - generated by KitingKeys",
-                        "// Unmaps all default bindings, then applies Vimium equivalents.",
-                        "api.unmapAllExcept([]);",
-                        "",
-                        "// --- Scrolling ---",
-                        "api.mapkey('j', 'Scroll down', function() { api.Normal.scroll('down'); });",
-                        "api.mapkey('k', 'Scroll up', function() { api.Normal.scroll('up'); });",
-                        "api.mapkey('h', 'Scroll left', function() { api.Normal.scroll('left'); });",
-                        "api.mapkey('l', 'Scroll right', function() { api.Normal.scroll('right'); });",
-                        "api.mapkey('gg', 'Scroll to top', function() { api.Normal.scroll('top'); });",
-                        "api.mapkey('G', 'Scroll to bottom', function() { api.Normal.scroll('bottom'); });",
-                        "api.mapkey('d', 'Scroll half page down', function() { api.Normal.scroll('pageDown'); });",
-                        "api.mapkey('u', 'Scroll half page up', function() { api.Normal.scroll('pageUp'); });",
-                        "",
-                        "// --- Links ---",
-                        "api.mapkey('f', 'Open link in current tab', function() { api.Hints.click('a[href]'); });",
-                        "api.mapkey('F', 'Open link in new tab', function() { api.Hints.click('a[href]', true); });",
-                        "",
-                        "// --- Navigation ---",
-                        "api.mapkey('H', 'Go back', function() { history.go(-1); });",
-                        "api.mapkey('L', 'Go forward', function() { history.go(1); });",
-                        "",
-                        "// --- Tabs ---",
-                        "api.mapkey('J', 'Go one tab left', function() { api.RUNTIME('previousTab'); });",
-                        "api.mapkey('K', 'Go one tab right', function() { api.RUNTIME('nextTab'); });",
-                        "api.mapkey('x', 'Close tab', function() { api.RUNTIME('closeTab'); });",
-                        "api.mapkey('X', 'Restore tab', function() { api.RUNTIME('openLast'); });",
-                        "api.mapkey('t', 'Open URL', function() { api.Front.openOmnibar({type: 'URLs', tabbed: true}); });",
-                        "api.mapkey('T', 'Search tabs', function() { api.Front.openOmnibar({type: 'Tabs'}); });",
-                        "",
-                        "// --- Clipboard ---",
-                        "api.mapkey('yy', 'Copy current URL', function() { api.Clipboard.write(window.location.href); });",
-                        "",
-                        "// --- Find ---",
-                        "api.mapkey('/', 'Find', function() { api.Front.openOmnibar({type: 'Find'}); });",
-                        "api.mapkey('n', 'Next match', function() { api.Visual.next(false); });",
-                        "api.mapkey('N', 'Previous match', function() { api.Visual.next(true); });",
-                        "",
-                        "// --- Visual ---",
-                        "api.mapkey('v', 'Enter visual mode', function() { api.Visual.toggle(); });",
-                        "",
-                        "// --- Misc ---",
-                        "api.mapkey('?', 'Show help', function() { api.Front.showUsage(); });",
-                        "api.mapkey('r', 'Reload', function() { api.RUNTIME('reloadTab', { nocache: false }); });",
-                        "api.mapkey('gi', 'Focus first input', function() { api.Hints.create('input,textarea,[contenteditable]'); });",
-                    ].join("\n");
-                    break;
-                case "browser":
-                    confirmMsg = "Remove ALL extension keybindings? Only browser defaults will remain.";
-                    snippets = [
-                        "// Browser defaults only - all KitingKeys mappings removed",
-                        "api.unmapAllExcept([]);",
-                    ].join("\n");
-                    break;
-            }
-
-            if (!confirm(confirmMsg)) {
-                presetTip.textContent = "Cancelled.";
-                return;
-            }
-
-            RUNTIME('updateSettings', {
-                settings: {
-                    snippets: snippets,
-                    basicMappings: {}
-                }
-            }, function() {
-                if (preset === "kitingkeys") {
-                    RUNTIME("resetSettings", null, function(response) {
-                        renderSettings(response.settings);
-                        renderKeyMappings(response.settings);
-                        presetTip.textContent = "KitingKeys defaults restored.";
-                    });
-                } else {
-                    // Reload to apply new snippets
-                    presetTip.textContent = "Preset applied. Reloading...";
-                    setTimeout(function() { location.reload(); }, 500);
-                }
-            });
-        };
     }
 }

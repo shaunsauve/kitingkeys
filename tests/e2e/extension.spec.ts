@@ -35,28 +35,27 @@ test.describe('Extension loading', () => {
     await page.goto(`chrome-extension://${extensionId}/pages/options.html`);
     // Check title
     await expect(page).toHaveTitle('KitingKeys Settings');
-    // Check browser defaults section exists
-    const browserDefaultsToggle = page.locator('#browserDefaultsToggle');
-    await expect(browserDefaultsToggle).toBeVisible();
-    // Check preset selector exists
-    const presetSelect = page.locator('#presetSelect');
-    await expect(presetSelect).toBeVisible();
+    // Sidebar should be visible
+    const sidebar = page.locator('#settings-sidebar');
+    await expect(sidebar).toBeVisible();
+    // Keybindings tab should be active by default
+    const keybindingsTab = page.locator('#settings-sidebar li[data-tab="keybindings"]');
+    await expect(keybindingsTab).toHaveClass(/active/);
   });
 
-  test('browser defaults reference expands', async ({ context, extensionId, browserName }) => {
+  test('browser bindings appear as locked rows in table', async ({ context, extensionId, browserName }) => {
     test.skip(browserName === 'firefox', 'Firefox extension loading not yet supported');
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/pages/options.html`);
-    const toggle = page.locator('#browserDefaultsToggle');
-    await toggle.click();
-    const content = page.locator('#browserDefaultsContent');
-    await expect(content).toBeVisible();
-    // Should contain at least one table with shortcuts
-    const table = content.locator('table');
-    await expect(table).toBeVisible();
-    // Check for overridable/locked badges
-    const badges = content.locator('.badge-override, .badge-locked');
-    expect(await badges.count()).toBeGreaterThan(5);
+    // Wait for keybindings table to populate
+    await page.waitForSelector('#keybindings-table tbody tr', { timeout: 20000 });
+    // Browser rows should exist
+    const browserRows = page.locator('tr[data-source="browser"]');
+    const count = await browserRows.count();
+    expect(count).toBeGreaterThan(0);
+    // Browser rows should have locked badges
+    const lockedBadges = page.locator('tr[data-source="browser"] .badge-locked');
+    expect(await lockedBadges.count()).toBeGreaterThan(0);
   });
 });
 

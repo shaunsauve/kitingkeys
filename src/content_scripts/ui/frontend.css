@@ -193,6 +193,23 @@ body {
 #sk_omnibarSearchResult.commands>ul>li {
     justify-content: space-between;
 }
+#sk_omnibarSearchResult.command_palette>ul>li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+#sk_omnibarSearchResult.command_palette .command_palette_key kbd {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    font-size: 11px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    min-width: 24px;
+    text-align: center;
+    display: inline-block;
+}
+#sk_omnibarSearchResult.command_palette .command_palette_annotation {
+    flex: 1;
+}
 #sk_status {
     position: fixed;
     bottom: 0;

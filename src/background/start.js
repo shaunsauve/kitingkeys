@@ -3,6 +3,59 @@ import {
 } from '../common/utils.js';
 import llmClients from './llm.js';
 
+// MV3 service workers can restart at any time, losing all in-memory state.
+// sessionState wraps chrome.storage.session to persist critical globals across
+// restarts while keeping synchronous in-memory reads for performance.
+// In MV2, persistent background pages don't need this — globals survive fine.
+const sessionState = (() => {
+    const isMV3 = typeof chrome !== 'undefined'
+        && chrome.runtime && chrome.runtime.getManifest
+        && chrome.runtime.getManifest().manifest_version === 3;
+
+    // In-memory mirror — all reads stay synchronous against this object.
+    let _cache = {};
+
+    // Write-through: update in-memory cache AND persist to session storage.
+    function setState(key, value) {
+        _cache[key] = value;
+        if (isMV3 && chrome.storage && chrome.storage.session) {
+            chrome.storage.session.set({ [key]: value });
+        }
+    }
+
+    // Synchronous read from the in-memory mirror.
+    function getState(key, defaultValue) {
+        return _cache.hasOwnProperty(key) ? _cache[key] : defaultValue;
+    }
+
+    // Bulk-initialize: restore persisted session state into the in-memory cache.
+    // Called once at service worker startup before any listeners fire.
+    async function initState(defaults) {
+        if (isMV3 && chrome.storage && chrome.storage.session) {
+            // Allow content scripts to read session storage if needed.
+            try {
+                await chrome.storage.session.setAccessLevel({
+                    accessLevel: 'TRUSTED_AND_UNTRUSTED_CONTEXTS'
+                });
+            } catch (e) {
+                // setAccessLevel may not be available in older Chrome versions
+            }
+            const keys = Object.keys(defaults);
+            const stored = await chrome.storage.session.get(keys);
+            for (const key of keys) {
+                // Prefer persisted value; fall back to provided default.
+                _cache[key] = stored.hasOwnProperty(key) ? stored[key] : defaults[key];
+            }
+        } else {
+            // MV2: just seed the cache with defaults (they're only used as
+            // initial values — the actual globals work fine on their own).
+            Object.assign(_cache, defaults);
+        }
+    }
+
+    return { getState, setState, initState, get isMV3() { return isMV3; } };
+})();
+
 function request(url, onReady, headers, data, onException) {
     headers = headers || {};
     const CHARTSET_RE = /(?:charset|encoding)\s*=\s*['"]? *([\w\-]+)/i;
@@ -109,14 +162,19 @@ var Gist = (function() {
         });
     }
 
-    var _token, _gist = "", _comments = [];
+    // MV3: Gist credentials survive service worker restarts via session state.
+    var _token = sessionState.getState('gist_token', undefined),
+        _gist = sessionState.getState('gist_id', ""),
+        _comments = sessionState.getState('gist_comments', []);
     self.initGist = function(token, onGistReady) {
         if (_token === token && _gist !== "") {
             return _gist;
         } else {
             _token = token;
+            sessionState.setState('gist_token', _token);
             _initGist(_token, "cloudboard", function(gist) {
                 _gist = gist;
+                sessionState.setState('gist_id', _gist);
                 onGistReady && onGistReady(_gist);
             });
         }
@@ -142,6 +200,7 @@ var Gist = (function() {
             _comments = JSON.parse(res).map(function(c) {
                 return c.id;
             });
+            sessionState.setState('gist_comments', _comments);
             cb(_comments);
         }, {
             'Authorization': 'token ' + _token
@@ -194,6 +253,13 @@ var Gist = (function() {
         }
     };
 
+    // MV3: re-hydrate Gist closure vars after session state is restored.
+    self._hydrate = function() {
+        _token = sessionState.getState('gist_token', _token);
+        _gist = sessionState.getState('gist_id', _gist);
+        _comments = sessionState.getState('gist_comments', _comments);
+    };
+
     return self;
 })();
 
@@ -202,6 +268,36 @@ function start(browser) {
 
     const isMV3 = chrome.runtime.getManifest().manifest_version === 3;
 
+    // MV3: restore tab-related state that must survive service worker restarts.
+    // In MV2 these are plain globals that live for the lifetime of the background page.
+    //
+    // We kick off restoration immediately but DON'T await it here — Chrome MV3
+    // requires all event listeners to be registered synchronously in the first
+    // turn of the event loop. The _stateReady promise resolves before any user
+    // interaction triggers handlers, so the restored values are available in time.
+    const _stateReady = sessionState.initState({
+        tabHistory: [],
+        tabHistoryIndex: 0,
+        chromelikeNewTabPosition: 0,
+        historyTabAction: false,
+        tabActivated: {},
+        tabURLs: {},
+        // Gist credentials (also initialized in the Gist IIFE above)
+        gist_token: undefined,
+        gist_id: "",
+        gist_comments: [],
+    }).then(() => {
+        // Once session storage is loaded, hydrate the local variables from cache.
+        tabHistory = sessionState.getState('tabHistory', []);
+        tabHistoryIndex = sessionState.getState('tabHistoryIndex', 0);
+        chromelikeNewTabPosition = sessionState.getState('chromelikeNewTabPosition', 0);
+        historyTabAction = sessionState.getState('historyTabAction', false);
+        tabActivated = sessionState.getState('tabActivated', {});
+        tabURLs = sessionState.getState('tabURLs', {});
+        // Re-hydrate Gist IIFE closure variables from restored session state.
+        Gist._hydrate();
+    });
+
     var tabHistory = [],
         tabHistoryIndex = 0,
         chromelikeNewTabPosition = 0,
@@ -209,7 +305,7 @@ function start(browser) {
 
     // data by tab id
     var tabActivated = {},
-        tabMessages = {},
+        tabMessages = {},  // ephemeral — callbacks can't be serialized, accept loss on restart
         tabURLs = {};
 
     var newTabUrl = browser._setNewTabUrl();
@@ -298,6 +394,9 @@ function start(browser) {
         tabHistory = tabHistory.filter(function(e) {
             return e !== tabId;
         });
+        sessionState.setState('tabActivated', tabActivated);
+        sessionState.setState('tabURLs', tabURLs);
+        sessionState.setState('tabHistory', tabHistory);
         if (_queueURLs.length) {
             chrome.tabs.create({
                 active: false,
@@ -382,6 +481,13 @@ function start(browser) {
         _tabActivated(activeInfo.tabId);
         historyTabAction = false;
         chromelikeNewTabPosition = 0;
+
+        // Persist tab state so it survives MV3 service worker restarts.
+        sessionState.setState('tabHistory', tabHistory);
+        sessionState.setState('tabHistoryIndex', tabHistoryIndex);
+        sessionState.setState('tabActivated', tabActivated);
+        sessionState.setState('historyTabAction', historyTabAction);
+        sessionState.setState('chromelikeNewTabPosition', chromelikeNewTabPosition);
 
         _updateTabIndices();
     });
@@ -888,6 +994,8 @@ function start(browser) {
                     tabHistoryIndex = tabHistory.length - 1;
                 }
             }
+            sessionState.setState('historyTabAction', historyTabAction);
+            sessionState.setState('tabHistoryIndex', tabHistoryIndex);
             const tabId = tabHistory[tabHistoryIndex];
             chrome.tabs.update(tabId, {
                 active: true
@@ -1170,6 +1278,7 @@ function start(browser) {
                 default:
                     newTabPosition = currentTab.index + 1 + chromelikeNewTabPosition;
                     chromelikeNewTabPosition++;
+                    sessionState.setState('chromelikeNewTabPosition', chromelikeNewTabPosition);
                     break;
             }
         }
@@ -1617,6 +1726,7 @@ function start(browser) {
                 tabURLs[tabId] = {};
             }
             tabURLs[tabId][message.url] = message.title;
+            sessionState.setState('tabURLs', tabURLs);
             return {
                 active: sender.tab.active,
                 index: conf.showTabIndices ? sender.tab.index + 1 : 0
@@ -1784,16 +1894,46 @@ function start(browser) {
             });
         });
     };
+    // MV3 service workers have no DOM, so image measurement is delegated
+    // to an offscreen document that can create <img> elements.
+    var _offscreenReady = false;
+    function _ensureOffscreen(cb) {
+        if (_offscreenReady) return cb();
+        chrome.offscreen.createDocument({
+            url: "pages/offscreen.html",
+            reasons: ["DOM_PARSER"],
+            justification: "Measure image dimensions for screen capture"
+        }, function() {
+            // createDocument fails silently if already exists — treat both cases as ready.
+            _offscreenReady = true;
+            cb();
+        });
+    }
+
     self.getCaptureSize = function(message, sender, sendResponse) {
-        var img = document.createElement( "img" );
-        img.onload = function() {
-            _response(message, sendResponse, {
-                width: img.width,
-                height: img.height
-            });
-        };
         chrome.tabs.captureVisibleTab(null, {format: "png"}, function(dataUrl) {
-            img.src = dataUrl;
+            if (isMV3) {
+                _ensureOffscreen(function() {
+                    chrome.runtime.sendMessage({
+                        action: "measureImage",
+                        dataUrl: dataUrl
+                    }, function(resp) {
+                        _response(message, sendResponse, {
+                            width: resp.width,
+                            height: resp.height
+                        });
+                    });
+                });
+            } else {
+                var img = document.createElement("img");
+                img.onload = function() {
+                    _response(message, sendResponse, {
+                        width: img.width,
+                        height: img.height
+                    });
+                };
+                img.src = dataUrl;
+            }
         });
     };
     self.deleteHistoryOlderThan = function(message, sender, sendResponse) {

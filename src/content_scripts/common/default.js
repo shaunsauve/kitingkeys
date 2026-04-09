@@ -39,6 +39,9 @@ export default function(api, clipboard, insert, normal, hints, visual, front, br
     mapkey('?', '#0Show usage', function() {
         front.showUsage();
     });
+    mapkey('<Ctrl-Shift-p>', '#0Open command palette', function() {
+        front.openOmnibar({type: "CommandPalette"});
+    }, {repeatIgnore: true});
     mapkey('Q', '#8Open omnibar for word translation', function() {
         front.openOmniquery({query: getWordUnderCursor(), style: "opacity: 0.8;"});
     });

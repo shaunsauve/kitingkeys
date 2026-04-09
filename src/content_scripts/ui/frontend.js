@@ -57,6 +57,95 @@ const Front = (function() {
     const api = createAPI(clipboard, insert, normal, hints, visual, self, {});
     createDefaultMappings(api, clipboard, insert, normal, hints, visual, self);
 
+    // WHY: Register CommandPalette handler here (after default mappings are loaded)
+    // so it can walk normal.mappings trie to collect all commands with their code.
+    // This must be after createDefaultMappings so all keybindings are available.
+    omnibar.addHandler('CommandPalette', (function() {
+        var paletteHandler = {
+            prompt: '⌘',
+            focusFirstCandidate: true,
+        };
+        var allCommands = [];
+
+        paletteHandler.onOpen = function() {
+            omnibar.resultsDiv.className = "command_palette";
+
+            // WHY: Collect commands fresh each time the palette opens,
+            // so user-added mappings from settings are included.
+            allCommands = [];
+            var metas = normal.mappings.getMetas(function(meta) {
+                return meta.annotation && meta.annotation.length > 0;
+            });
+            metas.forEach(function(meta) {
+                allCommands.push({
+                    word: meta.word,
+                    displayKey: KeyboardUtils.decodeKeystroke(meta.word),
+                    annotation: meta.annotation,
+                    code: meta.code,
+                });
+            });
+            // Sort alphabetically by annotation for easier scanning
+            allCommands.sort(function(a, b) {
+                return a.annotation.localeCompare(b.annotation);
+            });
+
+            _renderCommands(allCommands);
+        };
+
+        paletteHandler.onInput = function() {
+            var query = omnibar.input.value.toLowerCase();
+            if (!query) {
+                _renderCommands(allCommands);
+                return;
+            }
+            // WHY: Fuzzy match against both annotation and decoded key sequence,
+            // case-insensitive, so users can search by description or shortcut.
+            var filtered = allCommands.filter(function(cmd) {
+                return cmd.annotation.toLowerCase().indexOf(query) !== -1
+                    || cmd.displayKey.toLowerCase().indexOf(query) !== -1;
+            });
+            _renderCommands(filtered);
+        };
+
+        paletteHandler.onEnter = function() {
+            var fi = omnibar.resultsDiv.querySelector('li.focused');
+            if (fi && fi.commandCode) {
+                // WHY: Execute the command's code directly rather than using feedkeys,
+                // because feedkeys would re-enter the key dispatch system and could
+                // conflict with partial key sequences or repeat logic.
+                fi.commandCode();
+            }
+            return true; // close the omnibar
+        };
+
+        paletteHandler.onTabKey = function() {
+            var fi = omnibar.resultsDiv.querySelector('li.focused');
+            if (fi && fi.commandAnnotation) {
+                omnibar.input.value = fi.commandAnnotation;
+            }
+        };
+
+        function _renderCommands(commands) {
+            omnibar.listResults(commands, function(cmd) {
+                var li = createElementWithContent('li',
+                    `<span class="command_palette_key"><kbd>${htmlEncode(cmd.displayKey)}</kbd></span>`
+                    + `<span class="command_palette_annotation">${htmlEncode(cmd.annotation)}</span>`
+                );
+                li.commandCode = cmd.code;
+                li.commandAnnotation = cmd.annotation;
+                // WHY: Use addEventListener (not onclick) because listResults
+                // overwrites onclick after the render callback returns.
+                li.addEventListener('click', function() {
+                    cmd.code();
+                    self.hidePopup();
+                });
+                return li;
+            });
+        }
+
+        return paletteHandler;
+    })());
+
     var _actions = self._actions,
         _callbacks = {};
     self.contentCommand = function(args, successById) {

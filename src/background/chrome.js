@@ -140,8 +140,19 @@ function generatePassword() {
     return Array.from(random).join("");
 }
 
+// MV3: native messaging ports (chrome.runtime.connectNative) cannot be
+// serialized into storage — they are inherently ephemeral. We track the
+// connection state in chrome.storage.session so the service worker knows
+// whether it *should* reconnect after a restart, then lazily re-establish
+// the port via getOrReconnect().
+const isMV3 = (() => {
+    try { return chrome.runtime.getManifest().manifest_version === 3; }
+    catch { return false; }
+})();
+
 let nativeConnected = false;
 const nvimServer = {};
+
 function startNative() {
     return new Promise((resolve, reject) => {
         const nm = chrome.runtime.connectNative("surfingkeys");
@@ -154,12 +165,20 @@ function startNative() {
                 nvimServer.instance = startNative();
             } else {
                 delete nvimServer.instance;
+                // Persist that we are no longer connected so a restarted
+                // service worker does not attempt auto-reconnect.
+                if (isMV3 && chrome.storage && chrome.storage.session) {
+                    chrome.storage.session.set({ nativeConnected: false });
+                }
                 LOG("warn", "Failed to connect neovim, please make sure your neovim version 0.5 or above.");
             }
         });
         nm.onMessage.addListener(async (resp) => {
             if (resp.status === true) {
                 nativeConnected = true;
+                if (isMV3 && chrome.storage && chrome.storage.session) {
+                    chrome.storage.session.set({ nativeConnected: true });
+                }
                 if (resp.res.event === "serverStarted") {
                     const url = `127.0.0.1:${resp.res.port}/${password}`;
                     resolve({url, nm});
@@ -174,7 +193,23 @@ function startNative() {
         });
     });
 }
-nvimServer.instance = startNative();
+
+// MV3 getOrReconnect: if the service worker restarted and we previously had
+// a native connection, re-establish it. The port itself is gone but session
+// storage remembers we should be connected.
+if (isMV3 && chrome.storage && chrome.storage.session) {
+    chrome.storage.session.get('nativeConnected').then((result) => {
+        if (result.nativeConnected) {
+            nativeConnected = false; // reset — startNative will set it on success
+            nvimServer.instance = startNative();
+        } else {
+            nvimServer.instance = startNative();
+        }
+    });
+} else {
+    // MV2: start immediately as before
+    nvimServer.instance = startNative();
+}
 
 start({
     name: "Chrome",

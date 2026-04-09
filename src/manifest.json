@@ -45,7 +45,8 @@
         "downloads",
         "topSites",
         "clipboardRead",
-        "clipboardWrite"
+        "clipboardWrite",
+        "offscreen"
     ],
     "background": {
         "scripts": [

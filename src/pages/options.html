@@ -5,10 +5,13 @@
         <title>KitingKeys Settings</title>
         <link rel="stylesheet" href="../content.css">
         <link rel="stylesheet" href="options.css">
+        <link rel="stylesheet" href="keyInputWidget.css">
+        <link rel="stylesheet" href="keybindingsTable.css">
         <script src="ace.js" type="text/javascript" charset="utf-8"></script>
         <meta name="viewport" content="width=device-width, initial-scale=1">
     </head>
     <body>
+        <!-- WHY: sample script kept as text/plain so Ace editor can load it as default content -->
         <script type="text/plain" id="sample">// an example to create a new mapping `ctrl-y`
 api.mapkey('<Ctrl-y>', 'Show me the money', function() {
     api.Front.showPopup('a well-known phrase uttered by characters in the 1996 film Jerry Maguire (Escape to close).');
@@ -59,8 +62,10 @@ settings.theme = `
     font-size: 20pt;
 }`;
 // click `Save` button to make above settings to take effect.</script>
+
+        <!-- WHY: template used by proxy JS to clone new proxy pair rows -->
         <template id="templateProxyPair">
-            <div class="deleteProxyPair">🗑️</div>
+            <div class="deleteProxyPair">&#x1f5d1;&#xfe0f;</div>
             <div class="proxy">
                 Proxy:
                 <input type="text" value="" placeholder="192.168.1.100:8080" size=40>
@@ -73,93 +78,126 @@ settings.theme = `
                 </select>
             </div>
             <div class="autoproxy_hosts">
-                <h3>For below hosts, above proxy will be used, click ❌ to remove one.</h3>
+                <h3>For below hosts, above proxy will be used, click &#x274c; to remove one.</h3>
                 <input type="text" value="" placeholder="google.*, youtube.com" size=40> <button>Add New</button>
                 <div></div>
             </div>
         </template>
-        <div id="keyPicker" style="display: none;">
-            <h3>Pick up a new key, <kbd>Backsapce</kbd> to del backward, <kbd>Enter</kbd> to confirm, <kbd>Esc</kbd> to cancel.</h3>
-            <div class='pressedKey'><kbd id="inputKey">&nbsp;</kbd></div>
-        </div>
-        <div id="donationDiv" class="section">
-            <h3>KitingKeys is a fork of <a href="https://github.com/brookhong/Surfingkeys" target="_blank">Surfingkeys</a> by brookhong. Support the original with <a href="https://www.paypal.me/brookhong">paypal</a>.</h3>
-        </div>
-        <input id="advancedToggler" type="checkbox"/> Advanced mode
-        <span id="advancedTip" class="tip">If you're an advanced user, turn on it here.</span>
-        <div id="basicSettings">
-            <h3>Search Engine aliases</h3>
-            <div class="section" id="searchAliases">
-            </div>
-            <h3>Key mappings</h3>
-            <div class="section" id="basicMappings">
-            </div>
-        </div>
 
-        <div id="advancedSetting" class="section" style="display: none;">
-            <div id="localPathForSettings" style="display: inline-block;">
-                <label for="localPath">Load settings from:</label>
-                <input type="text" value="" id="localPath" name="localPath" size=40>
-                <span class=infoPointer for=localPathHelp>?</span>
-                <div class=info id='localPathHelp' style="display: none;">You can load settings from URLs in scheme http/https, for example, <a href="https://gist.githubusercontent.com/brookhong/755982e0014004207849f6e357af56f3/raw/83bdfdfa3a4fd2d07328dd4bb4f897150f531d74/gistfile1.txt">https://gist.githubusercontent.com/brookhong/755982e0014004207849f6e357af56f3/raw/83bdfdfa3a4fd2d07328dd4bb4f897150f531d74/gistfile1.txt</a>. <p id='localPathHelpForFile'>If you want to load settings from local file, please check <b>Allow access to file URLs</b> in <a href="chrome://extensions/">chrome://extensions/</a> for this extension, and specify the full path of your settings file, for example, /home/brook/.surfingkeys.js.</p></div>
-            </div>
-            <div id="save_container">
-                <a href="https://github.com/brookhong/Surfingkeys/issues" target="_blank">Report issues</a>
-                <a href="https://github.com/brookhong/Surfingkeys#edit-your-own-settings" target="_blank">How to add my own settings?</a>
-                <input id="save_button" value="Save" type="button">
-            </div>
-            <div style="width: 100%;height: 1px;display: inline-block;"></div>
-            <div id='mappings_container'>
-                <div id="defaultMappings"></div>
-                <div id="mappings" style="width: 100%"></div>
-            </div>
-        </div>
+        <!-- WHY: hidden file input for JSON import — no visible UI, triggered programmatically -->
+        <input type="file" id="importFileInput" accept=".json" style="display:none;">
 
-        <div id="proxySettings" class="section">
-            <h3>Proxy Settings</h3>
-            <div id="proxyMode">
-                Mode:
-                <select>
-                    <option>always</option>
-                    <option>byhost</option>
-                    <option>bypass</option>
-                    <option>clear</option>
-                    <option>direct</option>
-                    <option>system</option>
+        <!-- Sidebar -->
+        <nav id="settings-sidebar">
+            <div class="sidebar-header">
+                <img src="../icons/48.png" alt="KitingKeys">
+                <span>KitingKeys</span>
+            </div>
+            <ul>
+                <li data-tab="keybindings" class="active">
+                    <svg class="tab-icon" viewBox="0 0 16 16"><path d="M14 3H2a1 1 0 0 0-1 1v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1zM4 10H3V9h1v1zm0-2H3V7h1v1zm0-2H3V5h1v1zm2 4H5V9h1v1zm0-2H5V7h1v1zm0-2H5V5h1v1zm2 4H7V9h1v1zm0-2H7V7h1v1zm0-2H7V5h1v1zm4 4H9V9h3v1zm0-2H9V7h3v1zm0-2H9V5h3v1z"/></svg>
+                    <span>Keybindings</span>
+                </li>
+                <li data-tab="advanced">
+                    <svg class="tab-icon" viewBox="0 0 16 16"><path d="M4 1h8l3 3v8l-3 3H4l-3-3V4l3-3zm1 3v1h6V4H5zm0 3v1h6V7H5zm0 3v1h4v-1H5z"/></svg>
+                    <span>Advanced JS</span>
+                </li>
+                <li data-tab="proxy">
+                    <svg class="tab-icon" viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4zm0 10c-2 0-3.8-1-4.9-2.6C4.5 9.5 6.2 9 8 9s3.5.5 4.9 1.4A5.97 5.97 0 0 1 8 13z"/></svg>
+                    <span>Proxy</span>
+                </li>
+                <li data-tab="about">
+                    <svg class="tab-icon" viewBox="0 0 16 16"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a1 1 0 1 1 0 2 1 1 0 0 1 0-2zm2 8H6v-1h1V8H6V7h3v4h1v1z"/></svg>
+                    <span>About</span>
+                </li>
+            </ul>
+        </nav>
+
+        <!-- Main content area -->
+        <main id="settings-main">
+            <!-- Header bar (visible on keybindings tab) -->
+            <div id="settings-header">
+                <div id="searchModeToggle">
+                    <button data-search-mode="command" class="active" title="Search by command name">Command</button>
+                    <button data-search-mode="key" title="Press a key to find all bindings using it">Key</button>
+                </div>
+                <button id="searchClear" type="button" title="Clear search">&times;</button>
+                <input type="text" id="searchBindings" placeholder="Search by command name...">
+                <div id="filterChips">
+                    <button data-filter="all" class="active">All</button>
+                    <button data-filter="extension">Extension</button>
+                    <button data-filter="browser">Browser</button>
+                    <button data-filter="conflicts">Conflicts</button>
+                    <button data-filter="modified">Modified</button>
+                </div>
+                <select id="presetDropdown">
+                    <option value="">Presets...</option>
+                    <option value="kitingkeys">KitingKeys Defaults</option>
+                    <option value="vimium">Vimium Style</option>
+                    <option value="minimal">Minimal (clear all)</option>
+                    <option value="export">Export JSON...</option>
+                    <option value="import">Import JSON...</option>
                 </select>
-                <span class="tip">
-                    <span mode="always" style="display: none;">Connect to all sites through proxy.</span>
-                    <span mode="byhost" style="display: none;">Connect to only specified sites through related proxy.</span>
-                    <span mode="bypass" style="display: none;">Connect to all sites through proxy, with specified hosts excluded.</span>
-                    <span mode="clear" style="display: none;">Surfingkeys will not take control of proxy settings, this is the default mode.</span>
-                    <span mode="direct" style="display: none;">Connect to all sites directly.</span>
-                    <span mode="system" style="display: none;">Use proxy configuration taken from the operating system.</span>
-                </span>
             </div>
-            <button id="addProxyPair">Add proxy pair</button>
-        </div>
-        <div id="browserDefaultsSection" class="section">
-            <h3 id="browserDefaultsToggle" style="cursor:pointer; color:blue;">Browser Default Shortcuts ▶</h3>
-            <div id="browserDefaultsContent" style="display:none;">
-                <p class="tip">These are Chrome/Brave built-in shortcuts. Keys marked <span class="badge-override">overridable</span> can be intercepted by KitingKeys. Keys marked <span class="badge-locked">locked</span> are handled by the browser and cannot be overridden by extensions.</p>
-                <div id="browserDefaultsList"></div>
+
+            <!-- Tab panels -->
+            <div id="tab-keybindings" class="tab-panel active">
+                <!-- WHY: mount point only — keybindingsTable.js renders the table here -->
+                <div id="bindings-table-container"></div>
+                <!-- WHY: floating bar appears only when there are unsaved keybinding edits,
+                     giving the user explicit control over when changes persist to storage -->
+                <div id="save-revert-bar" style="display:none;">
+                    <span id="pending-count">0 unsaved changes</span>
+                    <button id="revert-btn" type="button">Revert</button>
+                    <button id="save-btn" type="button">Save</button>
+                </div>
             </div>
-        </div>
 
-        <div id="presetSection" class="section">
-            <h3>Presets &amp; Reset</h3>
-            <p>Restore keybindings to a preset. This replaces your current key mappings.</p>
-            <select id="presetSelect">
-                <option value="">-- Choose a preset --</option>
-                <option value="kitingkeys">KitingKeys defaults (Surfingkeys)</option>
-                <option value="vimium">Vimium defaults</option>
-                <option value="browser">Browser defaults only (unmap all extension keys)</option>
-            </select>
-            <button id="applyPreset" style="margin-left:8px;">Apply Preset</button>
-            <span id="presetTip" class="tip"></span>
-        </div>
+            <div id="tab-advanced" class="tab-panel" style="display:none;">
+                <div id="advanced-toolbar">
+                    <div id="localPathForSettings">
+                        <label for="localPath">Load settings from:</label>
+                        <input type="text" id="localPath" size="40">
+                    </div>
+                    <button id="save_button">Save</button>
+                </div>
+                <!-- WHY: Ace editor mounts into this div; needs 100% width to fill the panel -->
+                <div id="mappings" style="width:100%;"></div>
+            </div>
 
-        <h3 id="resetSettings">Reset</h3>
+            <div id="tab-proxy" class="tab-panel" style="display:none;">
+                <h2>Proxy Settings</h2>
+                <div id="proxyMode">
+                    Mode:
+                    <select>
+                        <option>always</option>
+                        <option>byhost</option>
+                        <option>bypass</option>
+                        <option>clear</option>
+                        <option>direct</option>
+                        <option>system</option>
+                    </select>
+                    <span class="tip">
+                        <span mode="always" style="display: none;">Connect to all sites through proxy.</span>
+                        <span mode="byhost" style="display: none;">Connect to only specified sites through related proxy.</span>
+                        <span mode="bypass" style="display: none;">Connect to all sites through proxy, with specified hosts excluded.</span>
+                        <span mode="clear" style="display: none;">KitingKeys will not take control of proxy settings, this is the default mode.</span>
+                        <span mode="direct" style="display: none;">Connect to all sites directly.</span>
+                        <span mode="system" style="display: none;">Use proxy configuration taken from the operating system.</span>
+                    </span>
+                </div>
+                <button id="addProxyPair">Add proxy pair</button>
+            </div>
+
+            <div id="tab-about" class="tab-panel" style="display:none;">
+                <h2>KitingKeys</h2>
+                <p>Fork of <a href="https://github.com/brookhong/Surfingkeys" target="_blank">Surfingkeys</a> by brookhong.</p>
+                <p>Version: <span id="version"></span></p>
+                <p>Support the original: <a href="https://www.paypal.me/brookhong">PayPal</a></p>
+            </div>
+        </main>
+
+        <script type="module" src="settingsShell.js"></script>
         <script src="../content.js"></script>
     </body>
 </html>
